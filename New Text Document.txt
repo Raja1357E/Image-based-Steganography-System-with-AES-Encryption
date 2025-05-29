@@ -1,0 +1,265 @@
+# steganography_app/README.md
+
+# 📘 Project Documentation: Steganography Web App with AES Encryption
+
+---
+
+## 📌 Overview
+
+This project is a **Streamlit-based web application** that enables users to **hide (encode)** and **reveal (decode)** secret **text or files inside images** using **steganography**. It adds an extra layer of protection with **AES encryption**.
+
+---
+
+## 🏗️ Project Structure
+
+```
+steganography_app/
+│
+├── app.py                  # Main Streamlit frontend application
+├── aes_utils.py            # AES encryption and decryption utility
+├── encode.py               # Embeds encrypted data into an image
+├── decode.py               # Extracts hidden data from stego image
+├── requirements.txt        # Python dependencies
+└── README.md               # (optional) Project documentation
+```
+
+---
+
+## 🔐 Features
+
+- Hide **text** or **files** inside any image (JPEG, PNG, etc.)
+- Encrypt your data using **AES (Advanced Encryption Standard)**
+- Password/key-protected encoding/decoding
+- Friendly UI built with **Streamlit**
+- Local processing — **no data leaves your device**
+- Secure and customizable
+
+---
+
+## 💪 Technologies Used
+
+- **Python 3.8+**
+- [Streamlit](https://streamlit.io/)
+- [PyCryptodome](https://www.pycryptodome.org/)
+- [Pillow (PIL)](https://python-pillow.org/)
+- **NumPy** for efficient pixel manipulation
+
+---
+
+## 🚀 Installation
+
+1. **Clone the repository**:
+
+```bash
+git clone https://github.com/your-username/steganography_app.git
+cd steganography_app
+```
+
+2. **Create a virtual environment (recommended)**:
+
+```bash
+python -m venv venv
+source venv/bin/activate    # On Windows: venv\Scripts\activate
+```
+
+3. **Install dependencies**:
+
+```bash
+pip install -r requirements.txt
+```
+
+4. **Run the app**:
+
+```bash
+streamlit run app.py
+```
+
+---
+
+## 🗖️ `requirements.txt`
+
+```txt
+streamlit
+pillow
+numpy
+pycryptodome
+```
+
+---
+
+## 🤔 How It Works
+
+### ✅ Encode Flow:
+
+1. User uploads an image.
+2. User chooses to hide either:
+   - Text (entered in a text box), or
+   - File (uploaded from disk)
+3. User enters a password (≥ 6 characters) for AES encryption.
+4. The app:
+   - Encrypts the text/file with AES using SHA256 key derivation.
+   - **Prepends a 4-byte length header** to the encrypted bytes.
+   - Embeds the resulting bits into the least significant bits (LSB) of the image.
+5. Outputs the stego image with a download button.
+
+---
+
+### 🔍 Decode Flow:
+
+1. User uploads the stego image.
+2. User enters the password used during encoding.
+3. The app:
+   - Extracts the length header and then the hidden binary data from the LSBs.
+   - Decrypts it with AES.
+4. If it's a text, it shows the message.
+   If it's a file, it provides a download button.
+
+---
+
+## 🧹 Module Breakdown
+
+### 🔐 `aes_utils.py`
+
+Handles encryption and decryption:
+
+- `encrypt_bytes(data: bytes, password: str) -> bytes`
+- `decrypt_bytes(data: bytes, password: str) -> bytes`
+
+Uses `AES-EAX` mode for both confidentiality and integrity.
+
+---
+
+### 🖼️ `encode.py`
+
+Hides encrypted data in the LSBs of the image:
+
+```python
+from PIL import Image
+import numpy as np
+
+def embed_data(image: Image.Image, data: bytes) -> Image.Image:
+    # Prepend 4-byte length of the actual data
+    data_len = len(data).to_bytes(4, byteorder='big')
+    full_data = data_len + data
+
+    # Convert to bits
+    data_bits = ''.join(f'{byte:08b}' for byte in full_data)
+
+    if len(data_bits) > image.width * image.height * 3:
+        raise ValueError("Data too large to hide in the image.")
+
+    pixels = np.array(image.convert("RGB"))
+    flat = pixels.flatten()
+
+    for i, bit in enumerate(data_bits):
+        flat[i] = (flat[i] & ~1) | int(bit)
+
+    new_pixels = flat.reshape(pixels.shape)
+    return Image.fromarray(new_pixels.astype(np.uint8))
+```
+
+---
+
+### 🕵️‍♂️ `decode.py`
+
+Extracts raw bits and reconstructs encrypted data:
+
+```python
+from PIL import Image
+import numpy as np
+
+def extract_data(image: Image.Image) -> bytes:
+    pixels = np.array(image.convert("RGB"))
+    flat = pixels.flatten()
+
+    # First 32 bits = 4 bytes = length header
+    length_bits = [str(flat[i] & 1) for i in range(32)]
+    length = int(''.join(length_bits), 2)
+
+    num_bits = (length + 4) * 8
+    bits = [str(flat[i] & 1) for i in range(num_bits)]
+
+    data = bytes(int(''.join(bits[i:i + 8]), 2) for i in range(0, num_bits, 8))
+    return data[4:]  # Skip first 4 bytes (length header)
+```
+
+---
+
+### 🌐 `app.py`
+
+Streamlit frontend:
+- Mode switch: Encode or Decode
+- File uploaders, text inputs, encryption key field
+- Dropdown to switch between hiding a message or a file
+- Responsive UI based on user selections
+- Automatically determines if data is text or file during decode
+
+---
+
+## 🖼️ UI Features
+
+- 📸 Upload original and stego images
+- 📝 Text box for secret messages
+- 📁 File upload (e.g., PDFs, ZIPs, etc.)
+- 🔐 Password-protected encryption
+- ⬇️ Download stego image or extracted file
+- ❌ Error handling and user feedback
+
+---
+
+## ⚠️ Security Notes
+
+- AES key is derived using SHA256 hash of the password.
+- Data is encrypted in memory; no storage on disk.
+- AES-EAX ensures both confidentiality and integrity.
+- No cloud processing — fully local and private.
+
+---
+
+## ✅ Example Use Case
+
+| Scenario | Description |
+|---------|-------------|
+| Confidential file sharing | Hide a PDF file inside a JPEG image using a password |
+| Personal communication | Send a secret message hidden in a photo to a friend |
+| Secure backup | Hide a config file or API keys inside an innocuous image |
+
+---
+
+## ❓ FAQ
+
+**Q1: What file types can be hidden?**  
+A: Any file type — PDFs, TXT, ZIP, EXE, etc.
+
+**Q2: What image formats are supported?**  
+A: PNG, JPEG, JPG (image is converted to RGB internally).
+
+**Q3: Is the password mandatory?**  
+A: Yes. Minimum 6 characters are required for security.
+
+**Q4: Where are my files stored?**  
+A: Nowhere — everything is processed in memory and remains local.
+
+---
+
+## 🔧 Future Enhancements
+
+- Add image format conversion (auto PNG for download)
+- Add QR code export for decoded text
+- Add file size visualizer before embedding
+- Add drag-and-drop support
+- Support for audio/video steganography
+
+---
+
+## 📷 Screenshot (UI Sample)
+
+> Add a Streamlit UI screenshot here to show the interface.
+
+---
+
+## 👨‍💼 Author
+
+- 💼 Developed by: *[Your Name or GitHub Username]*
+- 📧 Contact: *your.email@example.com*
+ 
